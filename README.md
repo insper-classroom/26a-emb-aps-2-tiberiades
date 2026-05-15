@@ -76,10 +76,10 @@ O gesto de **chacoalhar** a arma é detectado por um modelo treinado com dados d
 ## Diagrama de Blocos do Firmware
 
 ![Diagrama de Blocos do Firmware](./bloco.jpeg)
-```
+
 
 | Elemento | Descrição |
-|---|---|
+|---|---|       
 | **Task ADC** | Lê joystick via ADC, posta dados na fila de envio |
 | **Task IMU** | Lê MPU-6050 via I2C (ângulo + aceleração), sinaliza semáforo |
 | **Task BT** | Consome fila de botões + dados ADC/IMU, monta e envia pacote UART |
@@ -87,7 +87,7 @@ O gesto de **chacoalhar** a arma é detectado por um modelo treinado com dados d
 | **ISR GPIO** | Detecta borda de descida dos botões, envia para `btn_queue` |
 | **btn_queue** | Fila FreeRTOS entre ISR e Task BT |
 | **Semáforo IMU** | Sincroniza Task IMU com Task BT |
-```
+
 
 ---
 

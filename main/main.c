@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -16,7 +15,6 @@
 #include "pins.h"
 #include "hc06.h"
 #include "mpu6050.h"
-#include "Fusion.h"
 
 // ---------------------------------------------------------------------------
 // Protocolo Pico → PC (via HC-06)
@@ -33,8 +31,6 @@
 #define USE_BLUETOOTH       0       // 1 = HC-06, 0 = USB serial (teste com cabo)
 
 #define SAMPLE_PERIOD       0.01f   // 10 ms
-#define SHAKE_THRESHOLD     1.8f    // g — pico de aceleração para detectar chacoalhar
-#define SHAKE_COOLDOWN_MS   600     // ms mínimo entre dois gestos
 #define PWM_WRAP            1000
 #define PWM_FADE_STEP       10
 #define PWM_FADE_DELAY_MS   10
@@ -142,53 +138,40 @@ static void task_mpu(void *p) {
 // ---------------------------------------------------------------------------
 // task_fusion — AHRS, mira e detecção de chacoalhar
 // ---------------------------------------------------------------------------
-static void task_fusion(void *p) {
-    FusionAhrs ahrs;
-    FusionAhrsInitialise(&ahrs);
+#define GYRO_SENSITIVITY  0.8f   // pixels por grau/s — ajuste conforme preferência
+#define GYRO_DEAD_ZONE    1.5f   // graus/s — abaixo disso ignora (elimina drift)
+#define CALIB_SAMPLES     100    // amostras para calibrar offset do giroscópio
 
+static void task_fusion(void *p) {
     mpu_data_t data;
-    TickType_t last_shake = 0;
+    // Calibração: mede o offset (bias) do giroscópio parado
+    float bias_x = 0.0f, bias_y = 0.0f;
+    for (int i = 0; i < CALIB_SAMPLES; i++) {
+        xQueueReceive(xQueueMPU, &data, portMAX_DELAY);
+        bias_x += data.gyro[0] / 131.0f;
+        bias_y += data.gyro[2] / 131.0f;
+    }
+    bias_x /= CALIB_SAMPLES;
+    bias_y /= CALIB_SAMPLES;
 
     for (;;) {
         if (xQueueReceive(xQueueMPU, &data, portMAX_DELAY) != pdTRUE)
             continue;
 
-        FusionVector gyroscope = {{
-            data.gyro[0] / 131.0f,
-            data.gyro[1] / 131.0f,
-            data.gyro[2] / 131.0f,
-        }};
-        FusionVector accelerometer = {{
-            data.accel[0] / 16384.0f,
-            data.accel[1] / 16384.0f,
-            data.accel[2] / 16384.0f,
-        }};
+        float gx = -(data.gyro[0] / 131.0f - bias_x);  // negado: corrige inversão esq/dir
+        float gy =   data.gyro[2] / 131.0f - bias_y;   // eixo Z: cima/baixo com sensor de lado
 
-        FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, SAMPLE_PERIOD);
-        FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
-
-        // Movimento de mira: pitch → X, roll → Y
-        if (euler.angle.pitch > 5.0f || euler.angle.pitch < -5.0f) {
-            int16_t vx = (int16_t)(euler.angle.pitch * 0.4f);
+        // Movimento de mira — velocidade angular direta, sem acúmulo de ângulo
+        if (gx > GYRO_DEAD_ZONE || gx < -GYRO_DEAD_ZONE) {
+            int16_t vx = (int16_t)(gx * GYRO_SENSITIVITY);
             bt_send(0x00, vx);
         }
-        if (euler.angle.roll > 5.0f || euler.angle.roll < -5.0f) {
-            int16_t vy = (int16_t)(euler.angle.roll * 0.4f);
+        if (gy > GYRO_DEAD_ZONE || gy < -GYRO_DEAD_ZONE) {
+            int16_t vy = (int16_t)(gy * GYRO_SENSITIVITY);
             bt_send(0x01, vy);
         }
 
-        // Detecção de chacoalhar — magnitude total acima do threshold
-        float ax = accelerometer.axis.x;
-        float ay = accelerometer.axis.y;
-        float az = accelerometer.axis.z;
-        float mag = sqrtf(ax * ax + ay * ay + az * az);
-
-        TickType_t now = xTaskGetTickCount();
-        if (mag > SHAKE_THRESHOLD &&
-            (now - last_shake) > pdMS_TO_TICKS(SHAKE_COOLDOWN_MS)) {
-            last_shake = now;
-            bt_send(0x13, 0x0001);
-        }
+        // TODO: detecção de chacoalhar via IA (implementar depois)
     }
 }
 

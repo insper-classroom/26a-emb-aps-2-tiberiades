@@ -1,15 +1,18 @@
 """
-Receptor Bluetooth — The House of the Dead Remake
-===================================================
+Receptor Serial — The House of the Dead Remake
+===============================================
+Funciona tanto via cabo USB (USE_BLUETOOTH=0 no firmware)
+quanto via Bluetooth HC-06 (USE_BLUETOOTH=1).
+
 Protocolo Pico → PC (4 bytes cada):
     0xFF | TYPE | val_lo | val_hi   (val = int16_t little-endian)
 
-    TYPE 0x00 : move mouse X
-    TYPE 0x01 : move mouse Y
-    TYPE 0x10 : BTN_R → clique esquerdo (atirar)
-    TYPE 0x11 : BTN_G → tecla F (lanterna)
-    TYPE 0x12 : BTN_B → tecla Escape (pausar)
-    TYPE 0x13 : gesto chacoalhar → tecla R (recarregar)
+    TYPE 0x00 : movimento do mouse — eixo X
+    TYPE 0x01 : movimento do mouse — eixo Y
+    TYPE 0x10 : BTN_R (gatilho)  → clique esquerdo
+    TYPE 0x11 : BTN_G (lanterna) → tecla F
+    TYPE 0x12 : BTN_B (pausar)   → tecla Escape
+    TYPE 0x13 : gesto chacoalhar → tecla R (recarga via IA)
 
 Dependências:
     pip install pyserial pyautogui pynput
@@ -26,34 +29,52 @@ pyautogui.PAUSE = 0
 
 keyboard = KeyboardController()
 
+# Suavização — média móvel exponencial (0 < ALPHA < 1)
+# Menor = mais suave, mais lento. Maior = mais responsivo, menos suave.
+ALPHA = 0.3
+smooth_x = 0.0
+smooth_y = 0.0
+
 
 def selecionar_porta():
     portas = serial.tools.list_ports.comports()
+
     print("\nPortas disponíveis:")
     for i, p in enumerate(portas):
         print(f"  [{i}] {p.device} — {p.description}")
-    print("\nDigite o número da porta ou o caminho (ex: /dev/rfcomm0):")
+
+    print("\nDigite o número da porta ou o caminho direto (ex: /dev/rfcomm0, /dev/ttyACM0):")
     entrada = input("> ").strip()
+
     if entrada.startswith("/") or entrada.upper().startswith("COM"):
         return entrada
+
     try:
         idx = int(entrada)
         if 0 <= idx < len(portas):
             return portas[idx].device
     except ValueError:
         pass
+
     return entrada
 
 
 def handle_packet(type_byte, value):
+    global smooth_x, smooth_y
+
     if type_byte == 0x00:
-        pyautogui.moveRel(value, 0)
+        smooth_x = ALPHA * value + (1 - ALPHA) * smooth_x
+        if abs(smooth_x) >= 0.5:
+            pyautogui.moveRel(int(smooth_x), 0)
 
     elif type_byte == 0x01:
-        pyautogui.moveRel(0, value)
+        smooth_y = ALPHA * value + (1 - ALPHA) * smooth_y
+        if abs(smooth_y) >= 0.5:
+            pyautogui.moveRel(0, int(smooth_y))
 
     elif type_byte == 0x10:
         pyautogui.click()
+        print("  → atirar (BTN_R)")
 
     elif type_byte == 0x11:
         keyboard.press('f')
@@ -76,9 +97,15 @@ def main():
     print(f"\nConectando em {porta} @ 115200 baud...")
 
     with serial.Serial(porta, 115200, timeout=1) as ser:
-        print("Conectado! Controle o jogo com a pistola BT.\n")
+        print("Conectado! Movimente a pistola para controlar a mira.\n")
+
+        # Posiciona o cursor no centro da tela
+        largura, altura = pyautogui.size()
+        pyautogui.moveTo(largura // 2, altura // 2)
+        print(f"  cursor posicionado no centro ({largura // 2}, {altura // 2})")
 
         buf = bytearray()
+
         while True:
             data = ser.read(64)
             if not data:

@@ -23,7 +23,6 @@ target_link_libraries(pico_emb PRIVATE
     hardware_irq
     hardware_i2c
     hardware_pwm
-    Fusion
 )
 
 target_compile_definitions(pico_emb PRIVATE

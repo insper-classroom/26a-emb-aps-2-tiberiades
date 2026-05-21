@@ -1,33 +1,33 @@
-# 🔫 APS-2 — Controle Temático: Zumbi Blocks Ultimate
+# 🔫 APS-2 — Controle Temático: The House of the Dead Remake
 
 ## Jogo
 
-**Zumbi Blocks Ultimate 2.5.0** (PC, Windows)  
-FPS/TPS de sobrevivência zumbi. O jogador explora um mapa aberto, coleta armas, enfrenta hordas e bosses de zumbis. Controles padrão via teclado e mouse.
+**The House of the Dead Remake** (PC, Windows)  
+Shooter on-rails (trilho fixo) estilo arcade. O jogador não controla movimento — o personagem avança sozinho pelo cenário enquanto o jogador mira e atira em zumbis que surgem na tela. Revólveres têm 6 balas por carregador, exigindo recargas manuais frequentes.
 
 ---
 
 ## Ideia do Controle
 
-Formato de **pistola/rifle compacto** segurado com duas mãos.
+Formato de **pistola/revólver** segurado com uma mão, inspirado na Light Gun original do arcade.
 
-- **Joystick esquerdo** no corpo da arma → movimentação do personagem (WASD)
-- **IMU** embutido no cano → inclinar/girar a arma controla a mira (substitui o mouse)
-- **Botões** embaixo dos dedos → ações do jogo
-- **Gesto de chacoalhar** a arma → IA classifica o movimento do IMU → envia tecla de recarga (R)
+- **IMU** embutido no cano → inclinar/girar a pistola controla a mira (substitui o mouse)
+- **Botão R (gatilho)** embaixo do indicador → atirar (LMB)
+- **Botão G** → recarregar manualmente (tecla R)
+- **Botão B** → pausar / confirmar menu (Enter/Esc)
+- **Gesto de chacoalhar** → IA classifica movimento do IMU → envia tecla de recarga (R)
 
 ```
          ___________
         |           |
-[BTN A]-|  [IMU]    |
-[BTN B]-|           |--[JOYSTICK ESQ]
-[BTN C]-|___________|
-[BTN D]
-   |
-[gatilho / BTN A]
+        |  [IMU]    |
+[BTN G]-|           |
+[BTN B]-|___________|
+           |
+        [BTN R / gatilho]
 ```
 
-O gesto de **recarga** é o diferencial: chacoalhar fisicamente a arma → acelerômetro detecta pico → modelo de IA classifica → envia `R` ao jogo. Gesto intuitivo e temático.
+O gesto de **recarga** é o diferencial: chacoalhar fisicamente a pistola → acelerômetro detecta pico → modelo de IA classifica → envia `R` ao jogo. Intuitivo e fiel à mecânica de revólver.
 
 ---
 
@@ -35,15 +35,13 @@ O gesto de **recarga** é o diferencial: chacoalhar fisicamente a arma → acele
 
 | Tipo | Componente | Função no Jogo |
 |---|---|---|
-| Input | Joystick (ADC) | Movimentação WASD |
 | Input | IMU — MPU-6050 (I2C) | Controle de mira (mouse X/Y) |
 | Input | IMU — acelerômetro | Gesto de recarga (chacoalhar → tecla R) |
-| Input | Botão A (gatilho) | Atirar (LMB) |
-| Input | Botão B | Mirar (RMB) |
-| Input | Botão C | Pular (SPACE) |
-| Input | Botão D | Interagir / Chutar (E / F) |
-| Output | LED | Status de conexão Bluetooth |
-| Output | Buzzer | Feedback ao tomar dano |
+| Input | Botão R (gatilho) | Atirar (LMB) |
+| Input | Botão G | Recarregar (tecla R) |
+| Input | Botão B | Pausar / Confirmar (Enter/Esc) |
+| Output | LED RGB | Status de conexão Bluetooth |
+| Output | Buzzer | Feedback ao levar dano |
 | Output | HC-06 (UART→BT) | Envio de comandos ao PC |
 
 ---
@@ -60,16 +58,15 @@ O firmware envia pacotes ao PC. Um script Python recebe os dados, roda o modelo 
 
 | TYPE | Conteúdo |
 |---|---|
-| `0x01` | Joystick X/Y (movimento) |
-| `0x02` | IMU ângulo X/Y (mira) |
-| `0x03` | IMU aceleração XYZ (gesto) |
-| `0x04` | Estado dos botões (bitmask) |
+| `0x01` | IMU ângulo X/Y (mira) |
+| `0x02` | IMU aceleração XYZ (gesto de recarga) |
+| `0x03` | Estado dos botões (bitmask: R, G, B) |
 
 ---
 
 ## IA — Classificação de Gesto de Recarga
 
-O gesto de **chacoalhar** a arma é detectado por um modelo treinado com dados do acelerômetro (MPU-6050).
+O gesto de **chacoalhar** a pistola é detectado por um modelo treinado com dados do acelerômetro (MPU-6050). O modelo distingue o chacoalhar intencional de movimentos normais de mira.
 
 ---
 
@@ -77,17 +74,27 @@ O gesto de **chacoalhar** a arma é detectado por um modelo treinado com dados d
 
 ![Diagrama de Blocos do Firmware](./bloco.jpeg)
 
-
 | Elemento | Descrição |
-|---|---|       
-| **Task ADC** | Lê joystick via ADC, posta dados na fila de envio |
-| **Task IMU** | Lê MPU-6050 via I2C (ângulo + aceleração), sinaliza semáforo |
-| **Task BT** | Consome fila de botões + dados ADC/IMU, monta e envia pacote UART |
-| **Task Output** | Controla LED (conexão) e buzzer (dano) |
-| **ISR GPIO** | Detecta borda de descida dos botões, envia para `btn_queue` |
+|---|---|
+| **Task IMU** | Lê MPU-6050 via I2C (ângulo + aceleração), posta na fila de envio |
+| **Task BT** | Consome fila de botões + dados IMU, monta e envia pacote UART |
+| **Task Output** | Controla LED RGB (status conexão) e buzzer (dano) |
+| **ISR GPIO** | Detecta borda de descida dos botões R/G/B, envia para `btn_queue` |
 | **btn_queue** | Fila FreeRTOS entre ISR e Task BT |
 | **Semáforo IMU** | Sincroniza Task IMU com Task BT |
 
+---
+
+## Mapeamento de Pinos
+
+| Pino | Sinal |
+|---|---|
+| GP4 | Botão R (gatilho — atirar) |
+| GP5 | Botão G (recarregar) |
+| GP6 | Botão B (pausar/confirmar) |
+| GP7 | LED R |
+| GP8 | LED G |
+| GP9 | LED B |
 
 ---
 
@@ -95,13 +102,10 @@ O gesto de **chacoalhar** a arma é detectado por um modelo treinado com dados d
 
 ```
 /
-├── firmware/
+├── main/
 │   ├── main.c
-│   ├── task_adc.c
-│   ├── task_imu.c
-│   ├── task_bt.c
-│   ├── task_output.c
-│   └── isr_gpio.c
+│   ├── pins.h
+│   └── FreeRTOSConfig.h
 ├── pc/
 │   ├── receiver.py          # recebe pacotes BT e envia inputs ao jogo
 │   ├── train_gesture.py     # coleta amostras e treina modelo de gesto

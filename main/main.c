@@ -25,10 +25,12 @@
 //   TYPE 0x00 : movimento X do mouse  (int16_t LE)
 //   TYPE 0x01 : movimento Y do mouse  (int16_t LE)
 //   TYPE 0x10 : botão R (atirar)      val = 0x0001
-//   TYPE 0x11 : botão G (recarregar)  val = 0x0001
+//   TYPE 0x11 : botão G (lanterna)    val = 0x0001
 //   TYPE 0x12 : botão B (pausar)      val = 0x0001
 //   TYPE 0x13 : gesto de chacoalhar   val = 0x0001
 // ---------------------------------------------------------------------------
+
+#define USE_BLUETOOTH       0       // 1 = HC-06, 0 = USB serial (teste com cabo)
 
 #define SAMPLE_PERIOD       0.01f   // 10 ms
 #define SHAKE_THRESHOLD     1.8f    // g — pico de aceleração para detectar chacoalhar
@@ -87,8 +89,13 @@ static void bt_send(uint8_t type, int16_t value) {
         (uint8_t)(value & 0xFF),
         (uint8_t)((value >> 8) & 0xFF)
     };
+#if USE_BLUETOOTH
     for (int i = 0; i < 4; i++)
         xQueueSend(xQueueTX, &pkt[i], 0);
+#else
+    for (int i = 0; i < 4; i++)
+        putchar_raw(pkt[i]);
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -265,9 +272,11 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
 int main(void) {
     stdio_init_all();
 
+#if USE_BLUETOOTH
     init_uart_hc06();
     hc06_config("HOTD-CTRL", "1234");
     init_uart_irq();
+#endif
 
     xQueueMPU = xQueueCreate(10,  sizeof(mpu_data_t));
     xQueueTX  = xQueueCreate(256, sizeof(uint8_t));
@@ -276,7 +285,9 @@ int main(void) {
     xTaskCreate(task_mpu,    "MPU",    2048, NULL, 3, NULL);
     xTaskCreate(task_fusion, "FUSION", 4096, NULL, 2, NULL);
     xTaskCreate(task_btn,    "BTN",    512,  NULL, 2, NULL);
+#if USE_BLUETOOTH
     xTaskCreate(task_bt_tx,  "BTTX",  512,  NULL, 3, NULL);
+#endif
     xTaskCreate(task_led,    "LED",    512,  NULL, 1, NULL);
 
     vTaskStartScheduler();

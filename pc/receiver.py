@@ -7,7 +7,7 @@ Protocolo Pico → PC (4 bytes cada):
     TYPE 0x00 : move mouse X
     TYPE 0x01 : move mouse Y
     TYPE 0x10 : BTN_R → clique esquerdo (atirar)
-    TYPE 0x11 : BTN_G → tecla R (recarregar)
+    TYPE 0x11 : BTN_G → tecla F (lanterna)
     TYPE 0x12 : BTN_B → tecla Escape (pausar)
     TYPE 0x13 : gesto chacoalhar → tecla R (recarregar)
 
@@ -56,9 +56,9 @@ def handle_packet(type_byte, value):
         pyautogui.click()
 
     elif type_byte == 0x11:
-        keyboard.press('r')
-        keyboard.release('r')
-        print("  → recarga (BTN_G)")
+        keyboard.press('f')
+        keyboard.release('f')
+        print("  → lanterna (BTN_G)")
 
     elif type_byte == 0x12:
         keyboard.press(Key.esc)

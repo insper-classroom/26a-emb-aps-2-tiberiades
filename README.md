@@ -13,7 +13,7 @@ Formato de **pistola/revólver** segurado com uma mão, inspirado na Light Gun o
 
 - **IMU** embutido no cano → inclinar/girar a pistola controla a mira (substitui o mouse)
 - **Botão R (gatilho)** embaixo do indicador → atirar (LMB)
-- **Botão G** → recarregar manualmente (tecla R)
+- **Botão G** → acender/apagar a lanterna (tecla F)
 - **Botão B** → pausar / confirmar menu (Enter/Esc)
 - **Gesto de chacoalhar** → IA classifica movimento do IMU → envia tecla de recarga (R)
 
@@ -38,7 +38,7 @@ O gesto de **recarga** é o diferencial: chacoalhar fisicamente a pistola → ac
 | Input | IMU — MPU-6050 (I2C) | Controle de mira (mouse X/Y) |
 | Input | IMU — acelerômetro | Gesto de recarga (chacoalhar → tecla R) |
 | Input | Botão R (gatilho) | Atirar (LMB) |
-| Input | Botão G | Recarregar (tecla R) |
+| Input | Botão G | Lanterna (tecla F) |
 | Input | Botão B | Pausar / Confirmar (Enter/Esc) |
 | Output | LED RGB | Status de conexão Bluetooth |
 | Output | Buzzer | Feedback ao levar dano |
@@ -90,7 +90,7 @@ O gesto de **chacoalhar** a pistola é detectado por um modelo treinado com dado
 | Pino | Sinal |
 |---|---|
 | GP4 | Botão R (gatilho — atirar) |
-| GP5 | Botão G (recarregar) |
+| GP5 | Botão G (lanterna) |
 | GP6 | Botão B (pausar/confirmar) |
 | GP7 | LED R |
 | GP8 | LED G |

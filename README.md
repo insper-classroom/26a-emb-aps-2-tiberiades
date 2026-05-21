@@ -103,12 +103,12 @@ O gesto de **chacoalhar** a pistola é detectado por um modelo treinado com dado
 ```
 /
 ├── main/
-│   ├── main.c
-│   ├── pins.h
-│   └── FreeRTOSConfig.h
+│   ├── main.c               # firmware principal (tasks FreeRTOS)
+│   ├── pins.h               # mapeamento de pinos
+│   ├── hc06.h / hc06.c      # driver HC-06 (AT commands + UART)
+│   └── mpu6050.h            # defines de registradores do MPU-6050
+├── Fusion/                  # biblioteca Fusion AHRS (pitch/roll via giroscópio)
 ├── pc/
-│   ├── receiver.py          # recebe pacotes BT e envia inputs ao jogo
-│   ├── train_gesture.py     # coleta amostras e treina modelo de gesto
-│   └── model.pkl            # modelo treinado (gerado pelo script)
+│   └── receiver.py          # recebe pacotes BT e envia inputs ao jogo
 └── README.md
 ```

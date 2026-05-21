@@ -1,12 +1,26 @@
 #ifndef PINS_H
 #define PINS_H
 
-const int BTN_PIN_R = 4;
-const int BTN_PIN_G = 5;
-const int BTN_PIN_B = 6;
-const int LED_PIN_R = 7;
-const int LED_PIN_G = 8;
-const int LED_PIN_B = 9;
+// Botões do controle
+#define BTN_PIN_R  16   // gatilho — atirar (LMB)
+#define BTN_PIN_G  17   // recarregar (tecla R)
+#define BTN_PIN_B  18   // pausar/confirmar (Esc)
 
+// LED RGB (PWM) — feedback visual
+#define LED_PIN_R  7
+#define LED_PIN_G  8
+#define LED_PIN_B  9
+
+// MPU-6050 (I2C1)
+#define MPU_SDA_PIN  2
+#define MPU_SCL_PIN  3
+
+// HC-06 (UART1)
+#define HC06_UART_ID    uart1
+#define HC06_BAUD_RATE  115200
+#define HC06_TX_PIN     4
+#define HC06_RX_PIN     5
+#define HC06_ENABLE_PIN 6
+#define HC06_STATE_PIN  15
 
 #endif // PINS_H

@@ -9,8 +9,9 @@ Protocolo Pico → PC (4 bytes cada):
 
     TYPE 0x00 : movimento do mouse — eixo X
     TYPE 0x01 : movimento do mouse — eixo Y
+    TYPE 0x02 : BTN_G (calibrar)  → centraliza o cursor na tela
     TYPE 0x10 : BTN_R (gatilho)  → clique esquerdo
-    TYPE 0x11 : BTN_G (lanterna) → tecla F
+    TYPE 0x11 : (OBSOLETO — não enviado pelo firmware)
     TYPE 0x12 : BTN_B (pausar)   → tecla Escape
     TYPE 0x13 : gesto chacoalhar → tecla R (recarga via IA)
 
@@ -72,14 +73,16 @@ def handle_packet(type_byte, value):
         if abs(smooth_y) >= 0.5:
             pyautogui.moveRel(0, int(smooth_y))
 
+    elif type_byte == 0x02:
+        largura, altura = pyautogui.size()
+        pyautogui.moveTo(largura // 2, altura // 2)
+        smooth_x = 0.0
+        smooth_y = 0.0   # zera a suavização para não "arrastar" após recentralizar
+        print("  → calibrar / centralizar mouse (BTN_G)")
+
     elif type_byte == 0x10:
         pyautogui.click()
         print("  → atirar (BTN_R)")
-
-    elif type_byte == 0x11:
-        keyboard.press('f')
-        keyboard.release('f')
-        print("  → lanterna (BTN_G)")
 
     elif type_byte == 0x12:
         keyboard.press(Key.esc)

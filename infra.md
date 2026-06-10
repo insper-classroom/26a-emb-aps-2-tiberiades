@@ -51,18 +51,27 @@
 
 ## 3. LED RGB → Pico 2 (PWM)
 
-Use um LED RGB de **cátodo comum** (ou três LEDs separados) com resistores de 220 Ω em cada pino de cor.
+Use um LED RGB de **cátodo comum** (ou três LEDs separados) com resistores de 220 Ω em cada pino de cor. Apenas as cores vermelho e verde são usadas (o GP9 agora é o motor de vibração).
 
 | LED     | Pico 2 (GPIO) | Resistor |
 |---------|---------------|----------|
 | R (vermelho) | **GP7** | 220 Ω |
 | G (verde)    | **GP8** | 220 Ω |
-| B (azul)     | **GP9** | 220 Ω |
 | Cátodo (–)   | GND     | —       |
 
 **Comportamento:**
 - **Verde sólido** → HC-06 pareado (jogo pronto)
 - **Vermelho pulsando** → aguardando conexão Bluetooth
+
+---
+
+## 3b. Motor de vibração → Pico 2
+
+Motor de vibração acionado por um driver (transistor/MOSFET com diodo de roda-livre) — **não** ligue o motor direto no GPIO. Pulsa por ~150 ms a cada tiro.
+
+| Componente | Pico 2 (GPIO) |
+|------------|---------------|
+| Motor (via driver) | **GP9** |
 
 ---
 
@@ -73,7 +82,7 @@ Use botões de pressão momentâneos (push button). O firmware usa `gpio_pull_up
 | Botão  | Pico 2 (GPIO) | Função no jogo |
 |--------|---------------|----------------|
 | BTN R  | **GP16**      | Atirar (clique esquerdo) |
-| BTN G  | **GP17**      | Lanterna (tecla F) |
+| BTN G  | **GP21**      | Calibrar MPU + centralizar mouse |
 | BTN B  | **GP18**      | Pausar (Esc) |
 
 Cada botão: um terminal em GPxx, o outro em **GND**. Sem resistor externo necessário.
@@ -94,14 +103,14 @@ Cada botão: um terminal em GPxx, o outro em **GND**. Sem resistor externo neces
  HC06 EN  ─── GP6  │ 8           33  │ GND
   LED R   ─── GP7  │ 9           32  │ GP27
   LED G   ─── GP8  │ 10          31  │ GP26
-  LED B   ─── GP9  │ 11          30  │ RUN
+  MOTOR   ─── GP9  │ 11          30  │ RUN
               GP10  │ 12          29  │ GP22
               GP11  │ 13          28  │ GND
-              GP12  │ 14          27  │ GP21
+              GP12  │ 14          27  │ GP21 ──── BTN G
               GP13  │ 15          26  │ GP20
               GP14  │ 16          25  │ GP19
  HC06 STATE─ GP15  │ 17          24  │ GP18 ──── BTN B
-  BTN R  ─── GP16  │ 18          23  │ GP17 ──── BTN G
+  BTN R  ─── GP16  │ 18          23  │ GP17
               GND  │ 19          22  │ GND
               GP15  │ 20          21  │ GP10
                     └─────────────────┘
@@ -144,7 +153,8 @@ Abra **The House of the Dead Remake** e configure o tipo de controle para **Keyb
 - [ ] MPU-6050 conectado no I2C1 (GP2/GP3) com pull-ups
 - [ ] HC-06 alimentado em 5 V (VBUS), TX/RX cruzados com Pico
 - [ ] GP6 (EN) do HC-06 conectado mas em nível baixo durante o jogo
-- [ ] LED RGB com resistores 220 Ω em GP7/8/9
-- [ ] Três botões entre GP16/17/18 e GND
+- [ ] LED RGB (vermelho/verde) com resistores 220 Ω em GP7/8
+- [ ] Motor de vibração em GP9 via driver (transistor/MOSFET + diodo)
+- [ ] Três botões entre GP16/21/18 e GND
 - [ ] HC-06 pareado no PC com PIN 1234
 - [ ] `receiver.py` rodando antes de abrir o jogo

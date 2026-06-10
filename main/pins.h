@@ -3,13 +3,15 @@
 
 // Botões do controle
 #define BTN_PIN_R  16   // gatilho — atirar (LMB)
-#define BTN_PIN_G  17   // recarregar (tecla R)
+#define BTN_PIN_G  21   // calibrar MPU + centralizar mouse
 #define BTN_PIN_B  18   // pausar/confirmar (Esc)
 
-// LED RGB (PWM) — feedback visual
+// LED RGB (PWM) — feedback visual (apenas R e G são usados)
 #define LED_PIN_R  7
 #define LED_PIN_G  8
-#define LED_PIN_B  9
+
+// Motor de vibração — feedback háptico no tiro
+#define MOTOR_PIN  9
 
 // MPU-6050 (I2C1)
 #define MPU_SDA_PIN  2

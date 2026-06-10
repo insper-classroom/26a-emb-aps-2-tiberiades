@@ -6,23 +6,60 @@ endif()
 
 include(FreeRTOS_Kernel_import.cmake)
 
+# --- Edge Impulse (reconhecimento de gesto da MPU) ---
+set(MODEL_FOLDER  ${CMAKE_SOURCE_DIR}/ei-model)
+set(EI_SDK_FOLDER ${MODEL_FOLDER}/edge-impulse-sdk)
+include(${EI_SDK_FOLDER}/cmake/utils.cmake)
+
+add_definitions(-DEIDSP_QUANTIZE_FILTERBANK=0
+                -DFREERTOS_ENABLED=0
+                -DARM_MATH_LOOPUNROLL)
+
 add_executable(pico_emb
-    main.c
+    main.cpp
     hc06.c
 )
 
+# Fontes do SDK do Edge Impulse + modelo compilado
+RECURSIVE_FIND_FILE(EI_CPP   "${EI_SDK_FOLDER}" "*.cpp")
+RECURSIVE_FIND_FILE(EI_CC    "${EI_SDK_FOLDER}" "*.cc")
+RECURSIVE_FIND_FILE(EI_C     "${EI_SDK_FOLDER}" "*.c")
+RECURSIVE_FIND_FILE(EI_S     "${EI_SDK_FOLDER}" "*.s")
+RECURSIVE_FIND_FILE(EI_MODEL "${MODEL_FOLDER}/tflite-model" "*.cpp")
+target_sources(pico_emb PRIVATE ${EI_CPP} ${EI_CC} ${EI_C} ${EI_S} ${EI_MODEL})
+
 target_include_directories(pico_emb PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
+    ${MODEL_FOLDER}
+    ${MODEL_FOLDER}/tflite-model
+    ${MODEL_FOLDER}/model-parameters
+    ${EI_SDK_FOLDER}
+    ${EI_SDK_FOLDER}/third_party
+    ${EI_SDK_FOLDER}/third_party/ruy
+    ${EI_SDK_FOLDER}/third_party/gemmlowp
+    ${EI_SDK_FOLDER}/third_party/flatbuffers/include
+    ${EI_SDK_FOLDER}/tensorflow
+    ${EI_SDK_FOLDER}/dsp
+    ${EI_SDK_FOLDER}/classifier
+    ${EI_SDK_FOLDER}/anomaly
+    ${EI_SDK_FOLDER}/CMSIS/NN/Include
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Include
+    ${EI_SDK_FOLDER}/CMSIS/DSP/PrivateInclude
+    ${EI_SDK_FOLDER}/CMSIS/Core/Include
+    ${EI_SDK_FOLDER}/porting
 )
 
 target_link_libraries(pico_emb PRIVATE
     pico_async_context_freertos
     FreeRTOS-Kernel-Heap4
     pico_stdlib
+    pico_unique_id
     hardware_uart
     hardware_irq
     hardware_i2c
     hardware_pwm
+    hardware_dma
+    hardware_flash
 )
 
 target_compile_definitions(pico_emb PRIVATE

@@ -17,10 +17,12 @@
 #include "mpu6050.h"
 
 // Edge Impulse — reconhecimento de gesto da MPU
+#if WITH_EI
 #include "edge-impulse-sdk/classifier/ei_run_classifier.h"
 #include "edge-impulse-sdk/dsp/numpy.hpp"
 #include "model-parameters/model_metadata.h"
 using namespace ei;
+#endif
 
 // ---------------------------------------------------------------------------
 // Protocolo Pico → PC (via HC-06)
@@ -37,6 +39,7 @@ using namespace ei;
 
 #define USE_BLUETOOTH       0       // 1 = HC-06, 0 = USB serial (teste com cabo)
 #define DEBUG_MPU           0       // 1 = imprime valores da MPU em texto (não envia protocolo)
+#define DEBUG_BOOT          0       // DIAGNÓSTICO: imprime marcos de boot e heartbeat na UART
 
 #define SAMPLE_PERIOD       0.01f   // 10 ms
 #define PWM_WRAP            1000
@@ -46,7 +49,7 @@ using namespace ei;
 // Reconhecimento de gesto (Edge Impulse)
 #define GESTURE_LABEL       "Recharge"  // nome EXATO do label no seu export
 #define GESTURE_THRESHOLD   0.7f
-#define GESTURE_COOLDOWN_MS 800
+#define GESTURE_COOLDOWN_MS 2000
 
 typedef struct { int16_t accel[3]; int16_t gyro[3]; } mpu_data_t;
 typedef struct { int axis; int16_t value; }             pos_t;
@@ -59,6 +62,29 @@ static QueueHandle_t xQueueGesture;        // amostras da MPU para a inferência
 
 static TaskHandle_t xFusionHandle = NULL;  // notificado para recalibrar a MPU
 static TaskHandle_t xMotorHandle  = NULL;  // notificado para pulsar o motor
+
+#if WITH_EI
+void *ei_malloc(size_t size) {
+    return pvPortMalloc(size);
+}
+
+void *ei_calloc(size_t nitems, size_t size) {
+    return pvPortCalloc(nitems, size);
+}
+
+void ei_free(void *ptr) {
+    vPortFree(ptr);
+}
+#endif
+
+static void boot_require(bool ok, const char *what) {
+    if (ok)
+        return;
+
+    printf("[BOOT][ERRO] falha ao criar %s\r\n", what);
+    for (;;)
+        tight_loop_contents();
+}
 
 // ---------------------------------------------------------------------------
 // UART ISR — drena RX do HC-06 (ignoramos respostas em modo de jogo)
@@ -182,14 +208,16 @@ static void task_mpu(void *p) {
                    data.gyro[0],  data.gyro[1],  data.gyro[2]);
 #endif
             xQueueSend(xQueueMPU, &data, 0);
+#if WITH_EI
             xQueueSend(xQueueGesture, &data, 0);  // alimenta a inferência de gesto
+#endif
         }
 #if DEBUG_MPU
         else {
             printf("MPU I2C FALHOU  (write=%d read=%d)\r\n", w, r);
         }
 #endif
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(12));  // ~83 Hz (casa com EI_CLASSIFIER_FREQUENCY)
     }
 }
 
@@ -253,10 +281,18 @@ static void task_fusion(void *p) {
 // ---------------------------------------------------------------------------
 // task_gesture — Edge Impulse: classifica janela da MPU e envia 0x13
 // ---------------------------------------------------------------------------
+#if WITH_EI
 static void task_gesture(void *p) {
     static float features[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE];
     mpu_data_t d;
     TickType_t last_fire = 0;
+#if DEBUG_BOOT
+    bool first_window = true;
+    bool first_ok = true;
+    printf("[EI] task_gesture iniciou (janela=%u floats, eixos=%u)\r\n",
+           (unsigned)EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE,
+           (unsigned)EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME);
+#endif
 
     for (;;) {
         // Coleta uma janela completa (não sobreposta) da fila de amostras
@@ -273,13 +309,32 @@ static void task_gesture(void *p) {
 #endif
         }
 
+#if DEBUG_BOOT
+        if (first_window) {
+            first_window = false;
+            printf("[EI] primeira janela coletada, classificando\r\n");
+        }
+#endif
+
         signal_t signal;
         if (numpy::signal_from_buffer(features, EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, &signal) != 0)
             continue;
 
         ei_impulse_result_t result = {0};
-        if (run_classifier(&signal, &result, false) != EI_IMPULSE_OK)
+        EI_IMPULSE_ERROR err = run_classifier(&signal, &result, false);
+        if (err != EI_IMPULSE_OK) {
+#if DEBUG_BOOT
+            printf("[EI][ERRO] run_classifier falhou: %d\r\n", (int)err);
+#endif
             continue;
+        }
+
+#if DEBUG_BOOT
+        if (first_ok) {
+            first_ok = false;
+            printf("[EI] primeira inferencia OK\r\n");
+        }
+#endif
 
         size_t best = 0;
         for (size_t ix = 1; ix < EI_CLASSIFIER_LABEL_COUNT; ix++)
@@ -303,6 +358,7 @@ static void task_gesture(void *p) {
         xQueueReset(xQueueGesture);             // descarta amostras acumuladas na inferência
     }
 }
+#endif // WITH_EI
 
 // ---------------------------------------------------------------------------
 // task_btn — debounce e envio de eventos de botão
@@ -351,7 +407,7 @@ static void task_bt_tx(void *p) {
 // ---------------------------------------------------------------------------
 // task_motor — pulsa o motor de vibração ao ser notificado (cada tiro)
 // ---------------------------------------------------------------------------
-#define MOTOR_PULSE_MS 150
+#define MOTOR_PULSE_MS 1000
 static void task_motor(void *p) {
     gpio_init(MOTOR_PIN);
     gpio_set_dir(MOTOR_PIN, GPIO_OUT);
@@ -376,6 +432,9 @@ static void task_led(void *p) {
     pwm_init_pin(LED_PIN_G);
 
     int level = 0, dir = PWM_FADE_STEP;
+#if DEBUG_BOOT
+    int hb = 0;
+#endif
 
     for (;;) {
         bool connected = gpio_get(HC06_STATE_PIN);
@@ -389,13 +448,24 @@ static void task_led(void *p) {
             if (level >= PWM_WRAP) { level = PWM_WRAP; dir = -PWM_FADE_STEP; }
             if (level <= 0)        { level = 0;        dir =  PWM_FADE_STEP; }
         }
+#if DEBUG_BOOT
+        if (++hb >= 100) { hb = 0; printf("[HB] scheduler vivo (STATE=%d)\r\n", connected); }
+#endif
         vTaskDelay(pdMS_TO_TICKS(PWM_FADE_DELAY_MS));
     }
 }
 
 extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
-    (void)xTask; (void)pcTaskName;
-    for (;;);
+    (void)xTask;
+    printf("[RTOS][ERRO] stack overflow em %s\r\n", pcTaskName ? pcTaskName : "?");
+    for (;;)
+        tight_loop_contents();
+}
+
+extern "C" void vApplicationMallocFailedHook(void) {
+    printf("[RTOS][ERRO] pvPortMalloc falhou\r\n");
+    for (;;)
+        tight_loop_contents();
 }
 
 // ---------------------------------------------------------------------------
@@ -403,6 +473,11 @@ extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskNa
 // ---------------------------------------------------------------------------
 int main(void) {
     stdio_init_all();
+
+#if DEBUG_BOOT
+    // Sem sleep_ms (evita qualquer dependência de timer pré-scheduler).
+    printf("\r\n[BOOT] main alcancado, stdio ok\r\n");
+#endif
 
 #if DEBUG_MPU
     sleep_ms(2000);  // dá tempo de abrir o monitor serial antes do banner
@@ -418,17 +493,29 @@ int main(void) {
     xQueueMPU     = xQueueCreate(10,  sizeof(mpu_data_t));
     xQueueTX      = xQueueCreate(256, sizeof(uint8_t));
     xQueueBTN     = xQueueCreate(8,   sizeof(uint8_t));
-    xQueueGesture = xQueueCreate(32,  sizeof(mpu_data_t));
-
-    xTaskCreate(task_mpu,     "MPU",    2048,  NULL, 3, NULL);
-    xTaskCreate(task_fusion,  "FUSION", 4096,  NULL, 2, &xFusionHandle);
-    xTaskCreate(task_gesture, "GEST",   16384, NULL, 2, NULL);
-    xTaskCreate(task_btn,     "BTN",    512,   NULL, 2, NULL);
-    xTaskCreate(task_motor,   "MOTOR",  256,   NULL, 2, &xMotorHandle);
-#if USE_BLUETOOTH
-    xTaskCreate(task_bt_tx,  "BTTX",  512,  NULL, 3, NULL);
+    boot_require(xQueueMPU != NULL, "xQueueMPU");
+    boot_require(xQueueTX != NULL, "xQueueTX");
+    boot_require(xQueueBTN != NULL, "xQueueBTN");
+#if WITH_EI
+    xQueueGesture = xQueueCreate(32, sizeof(mpu_data_t));
+    boot_require(xQueueGesture != NULL, "xQueueGesture");
 #endif
-    xTaskCreate(task_led,    "LED",    512,  NULL, 1, NULL);
+
+    boot_require(xTaskCreate(task_mpu,    "MPU",    2048, NULL, 3, NULL) == pdPASS, "task MPU");
+    boot_require(xTaskCreate(task_fusion, "FUSION", 4096, NULL, 2, &xFusionHandle) == pdPASS, "task FUSION");
+    boot_require(xTaskCreate(task_btn,    "BTN",    512,  NULL, 2, NULL) == pdPASS, "task BTN");
+    boot_require(xTaskCreate(task_motor,  "MOTOR",  256,  NULL, 2, &xMotorHandle) == pdPASS, "task MOTOR");
+#if WITH_EI
+    boot_require(xTaskCreate(task_gesture, "GEST", 8192, NULL, 1, NULL) == pdPASS, "task GEST");
+#endif
+#if USE_BLUETOOTH
+    boot_require(xTaskCreate(task_bt_tx, "BTTX", 512, NULL, 3, NULL) == pdPASS, "task BTTX");
+#endif
+    boot_require(xTaskCreate(task_led, "LED", 512, NULL, 1, NULL) == pdPASS, "task LED");
+
+#if DEBUG_BOOT
+    printf("[BOOT] iniciando scheduler\r\n");
+#endif
 
     vTaskStartScheduler();
     for (;;);

@@ -18,7 +18,7 @@ Protocolo Pico → PC (4 bytes cada):
 Dependências:
     pip install pyserial pyautogui pynput
 """
-
+r
 import struct
 import serial
 import serial.tools.list_ports

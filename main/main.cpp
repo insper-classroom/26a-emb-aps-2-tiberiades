@@ -52,8 +52,6 @@ using namespace ei;
 #define GESTURE_COOLDOWN_MS 2000
 
 typedef struct { int16_t accel[3]; int16_t gyro[3]; } mpu_data_t;
-typedef struct { int axis; int16_t value; }             pos_t;
-typedef struct { uint8_t type; int16_t value; }         bt_event_t;
 
 static QueueHandle_t xQueueMPU;
 static QueueHandle_t xQueueTX;
@@ -90,7 +88,7 @@ static void boot_require(bool ok, const char *what) {
 // UART ISR — drena RX do HC-06 (ignoramos respostas em modo de jogo)
 // ---------------------------------------------------------------------------
 static void uart_rx_handler(void) {
-    while (uart_is_readable(HC06_UART_ID))
+    if (uart_is_readable(HC06_UART_ID))
         uart_getc(HC06_UART_ID);
 }
 
@@ -408,16 +406,26 @@ static void task_bt_tx(void *p) {
 // task_motor — pulsa o motor de vibração ao ser notificado (cada tiro)
 // ---------------------------------------------------------------------------
 #define MOTOR_PULSE_MS 1000
+#define MOTOR_ACTIVE_LOW 0
+
+static void motor_set(bool on) {
+#if MOTOR_ACTIVE_LOW
+    gpio_put(MOTOR_PIN, on ? 0 : 1);
+#else
+    gpio_put(MOTOR_PIN, on ? 1 : 0);
+#endif
+}
+
 static void task_motor(void *p) {
     gpio_init(MOTOR_PIN);
     gpio_set_dir(MOTOR_PIN, GPIO_OUT);
-    gpio_put(MOTOR_PIN, 0);
+    motor_set(false);
 
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        gpio_put(MOTOR_PIN, 1);
+        motor_set(true);
         vTaskDelay(pdMS_TO_TICKS(MOTOR_PULSE_MS));
-        gpio_put(MOTOR_PIN, 0);
+        motor_set(false);
     }
 }
 

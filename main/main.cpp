@@ -463,9 +463,9 @@ static void task_led(void *p) {
     }
 }
 
-extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
-    (void)xTask;
-    printf("[RTOS][ERRO] stack overflow em %s\r\n", pcTaskName ? pcTaskName : "?");
+extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char *) {
+    const char *taskName = pcTaskGetName(xTask);
+    printf("[RTOS][ERRO] stack overflow em %s\r\n", taskName ? taskName : "?");
     for (;;)
         tight_loop_contents();
 }
